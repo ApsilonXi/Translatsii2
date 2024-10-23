@@ -1,126 +1,61 @@
-def parse_grammar(file_path):
-    grammar = {}
-    with open(file_path, 'r') as file:
-        for line in file:
-            line = line.strip()
-            if not line:  # Игнорируем пустые строки
+class PDA:
+    def __init__(self, grammar):
+        self.grammar = self.parse_grammar(grammar)
+        self.stack = []
+        self.active_states = set()
+
+    @staticmethod
+    def parse_grammar(grammar_lines):
+        grammar = {}
+        for line in grammar_lines:
+            line = line.replace(" ", "").replace("~", " ")
+            left_part, *right_parts = line.split(">")
+            for right_part in right_parts:
+                if left_part in grammar:
+                    grammar[left_part].append(right_part)
+                else:
+                    grammar[left_part] = [right_part]
+        return grammar
+
+    def analyze(self, input_string):
+        self.stack.append("E")  # Начинаем с начального символа грамматики
+        input_string += "#"  # Добавляем символ конца строки
+
+        while self.stack:
+            current_stack_top = self.stack.pop()
+            if current_stack_top == input_string[0]:  # Сравниваем со входной строкой
+                input_string = input_string[1:]  # Удаляем символ из входной строки
+                self.log_state(input_string)
+                if current_stack_top == "#":
+                    return True  # Успешное завершение
                 continue
-            parts = line.split('>')
-            lhs = parts[0].strip()
-            productions = parts[1].strip().split('|')
-            if lhs not in grammar:
-                grammar[lhs] = []
-            for production in productions:
-                grammar[lhs].append(production.strip())
-    return grammar
+            
+            if current_stack_top in self.grammar:  # Нетерминал
+                for production in self.grammar[current_stack_top]:
+                    self.stack.extend(reversed(production))  # Добавляем продукцию в стек в обратном порядке
+                    self.log_state(input_string)
+            else:
+                return False  # Состояние не соответствует ни одному правилу
 
-class NDPA:
-    def __init__(self, grammar):
-        self.grammar = grammar
-        self.stack = []
-        self.configuration_log = []
+        return False  # Если стек пуст, но строка не полностью обработана
 
-    def analyze(self, input_string):
-        self.stack.append('E')  # Начинаем с начального символа (в данном случае 'E')
-        self.configuration_log.append((self.stack.copy(), input_string))
-        return self._process(input_string)
+    def log_state(self, input_string):
+        print(f"Current input: {input_string}, Stack: {self.stack}")
 
-    def _process(self, input_string):
-        if not self.stack:
-            return not input_string  # Если стек пуст, мы проверяем, что строка также пустая
-        
-        current_symbol = self.stack.pop()
-        
-        if current_symbol in self.grammar:  # Если текущий символ — нетерминал
-            for production in self.grammar[current_symbol]:
-                self.stack.extend(reversed(production))  # Добавляем в стек продукцию
-                self.configuration_log.append((self.stack.copy(), input_string))
-                if self._process(input_string):
-                    return True
-                # Если анализ не удался, возвращаем стек и строку к предыдущему состоянию
-            self.stack.append(current_symbol)  # Возвращаем текущий символ в стек
-            return False
-        
-        elif current_symbol == '~' and input_string and input_string[0] == ' ':
-            return self._process(input_string[1:])  # Игнорируем пробелы
-        elif input_string and current_symbol == input_string[0]:
-            return self._process(input_string[1:])  # Если символы совпадают
+# Загружаем грамматики (можно разбить на разные файлы по необходимости)
+with open('lab3/grammar.txt', 'r') as f:
+    grammar_lines = f.readlines()
 
-        self.stack.append(current_symbol)  # Возвращаем текущий символ в стек, если ничего не сработало
-        return False
+grammar = [line.strip() for line in grammar_lines if line.strip()]
+pda = PDA(grammar)
 
-    def print_configuration_log(self):
-        for stack, remaining in self.configuration_log:
-            print(f"Стек: {stack}, Остальная строка: '{remaining}'")
+# Проверяем строку
+strings_to_check = [
+    "mab0",     # Верная строка для грамматики 1
 
-class NDPA:
-    def __init__(self, grammar):
-        self.grammar = grammar
-        self.stack = []
-        self.configuration_log = []
+]
 
-    def analyze(self, input_string):
-        self.stack.append('E')  # Начинаем с начального символа (в данном случае 'E')
-        self.configuration_log.append((self.stack.copy(), input_string))
-        return self._process(input_string)
-
-    def _process(self, input_string):
-        if not self.stack:
-            return not input_string  # Если стек пуст, мы проверяем, что строка также пустая
-        
-        current_symbol = self.stack.pop()
-        
-        if current_symbol in self.grammar:  # Если текущий символ — нетерминал
-            for production in self.grammar[current_symbol]:
-                self.stack.extend(reversed(production))  # Добавляем в стек продукцию
-                self.configuration_log.append((self.stack.copy(), input_string))
-                if self._process(input_string):
-                    return True
-                # Если анализ не удался, возвращаем стек и строку к предыдущему состоянию
-            self.stack.append(current_symbol)  # Возвращаем текущий символ в стек
-            return False
-        
-        elif current_symbol == '~' and input_string and input_string[0] == ' ':
-            return self._process(input_string[1:])  # Игнорируем пробелы
-        elif input_string and current_symbol == input_string[0]:
-            return self._process(input_string[1:])  # Если символы совпадают
-
-        self.stack.append(current_symbol)  # Возвращаем текущий символ в стек, если ничего не сработало
-        return False
-
-    def print_configuration_log(self):
-        for stack, remaining in self.configuration_log:
-            print(f"Стек: {stack}, Остальная строка: '{remaining}'")
-
-def menu():
-    choice = input('Выберите файл лексем:\n1. Грамматика 1\n2. Грамматика 2\n3. Грамматика 3\n')
-    match choice:
-        case '1':
-            # a - b / c
-            # m a / c b -
-            main('lab3/grammar1.txt')
-        case '2':
-            # a0x
-            # y2z
-            main('lab3/grammar2.txt')
-        case '3':
-            # ab
-            # aaab
-            main('lab3/grammar3.txt')
-
-def main(grammar_file):
-    test_string = input('Введите строку для анализа: ')   # Замените на необходимую строку для анализа
-
-    grammar = parse_grammar(grammar_file)
-    automaton = NDPA(grammar)
-
-    if automaton.analyze(test_string):
-        print("Строка допустима.")
-    else:
-        print("Строка недопустима.")
-    
-    print("\nКонфигурации во время выполнения:")
-    automaton.print_configuration_log()
-
-if __name__ == "__main__":
-    menu()
+for test_string in strings_to_check:
+    print(f"\nTesting string: {test_string}")
+    result = pda.analyze(test_string)
+    print(f"Result: {'Accepted' if result else 'Rejected'}")
