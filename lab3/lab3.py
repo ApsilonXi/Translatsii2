@@ -1,61 +1,212 @@
-class PDA:
-    def __init__(self, grammar):
-        self.grammar = self.parse_grammar(grammar)
-        self.stack = []
-        self.active_states = set()
+from random import choice, choices
 
-    @staticmethod
-    def parse_grammar(grammar_lines):
-        grammar = {}
-        for line in grammar_lines:
-            line = line.replace(" ", "").replace("~", " ")
-            left_part, *right_parts = line.split(">")
-            for right_part in right_parts:
-                if left_part in grammar:
-                    grammar[left_part].append(right_part)
-                else:
-                    grammar[left_part] = [right_part]
-        return grammar
+RULES = {}
+nonTerminals = None
 
-    def analyze(self, input_string):
-        self.stack.append("E")  # Начинаем с начального символа грамматики
-        input_string += "#"  # Добавляем символ конца строки
+def getGrammar(filename):
+    global nonTerminals, RULES
+    RULES = {}
+    nonTerminals = []
+    with open(filename, 'r', encoding='utf-8') as file:
+        lines = [line.rstrip() for line in file]
 
-        while self.stack:
-            current_stack_top = self.stack.pop()
-            if current_stack_top == input_string[0]:  # Сравниваем со входной строкой
-                input_string = input_string[1:]  # Удаляем символ из входной строки
-                self.log_state(input_string)
-                if current_stack_top == "#":
-                    return True  # Успешное завершение
-                continue
-            
-            if current_stack_top in self.grammar:  # Нетерминал
-                for production in self.grammar[current_stack_top]:
-                    self.stack.extend(reversed(production))  # Добавляем продукцию в стек в обратном порядке
-                    self.log_state(input_string)
+    for i in range(len(lines)):
+        nonTerminals.append(lines[i][0])
+        lines[i] = (lines[i].replace(' ', '')).partition('>')[2]
+        RULES[nonTerminals[i]] = lines[i].split('|')
+    
+    print("Правила: ", RULES)
+
+def assignWeights(grammar):
+    weights = {}
+    
+    for nonT, rules in grammar.items():
+        lengths = [len(rule) for rule in rules]
+        total_length = sum([1 / length for length in lengths]) 
+        weights[nonT] = [(1 / length) / total_length for length in lengths]
+    #print(weights)
+    return weights
+
+def check_nonT_in_str(string, nonT):
+    result = False
+    for i in string:
+        if i in nonT:
+            result = True
+            break
+    return result
+
+def generateString(grammar, nonT, max_depth=10):
+    string = nonT[0]
+    depth = 0
+    weights = assignWeights(grammar) 
+    
+    while check_nonT_in_str(string, nonT) and depth < max_depth:
+        new = ""
+        for i in string:
+            if i in nonT:
+                new += choice(RULES[i]) 
             else:
-                return False  # Состояние не соответствует ни одному правилу
+                new += i
+        #print(new)
+        string = new
+        depth += 1
+    
+    if depth == max_depth:
+        while check_nonT_in_str(string, nonT):
+            new = ""
+            for i in string:
+                if i in nonT:
+                    new += choices(RULES[i], weights[i])[0]  
+                else:
+                    new += i
+            #print(new)
+            string = new
+    
+    #print("ПОЛУЧЕНА СТРОКА: ", string)
+    return string
+            
+def checkString(string, grammar, max, nonT):
+    count = 0
+    res = False
+    while count != max:
+        spy = generateString(grammar, nonT)
+        if spy == string:
+            res = True
+            break
+        count += 1
+    return res
 
-        return False  # Если стек пуст, но строка не полностью обработана
+def checkstring(string, grammar, initial_state="S", max_depth=10):
+    index = [0]
+    def parse(rule, depth):
+        if depth > max_depth:
+            return False
 
-    def log_state(self, input_string):
-        print(f"Current input: {input_string}, Stack: {self.stack}")
+        start_index = index[0]
+        if rule not in grammar:
+            if index[0] < len(string) and string[index[0]] == rule:
+                index[0] += 1
+                return True
+            return False
+        if rule in grammar:
+            for production in grammar[rule]:
+                saved_index = index[0]
+                parts = list(production)
+                success = all(parse(part, depth + 1) for part in parts)
 
-# Загружаем грамматики (можно разбить на разные файлы по необходимости)
-with open('lab3/grammar.txt', 'r') as f:
-    grammar_lines = f.readlines()
+                if success:
+                    return True
+                index[0] = saved_index
 
-grammar = [line.strip() for line in grammar_lines if line.strip()]
-pda = PDA(grammar)
+        index[0] = start_index
+        return False
 
-# Проверяем строку
-strings_to_check = [
-    "mab0",     # Верная строка для грамматики 1
+    return parse(initial_state, 0) and index[0] == len(string)
+    
 
-]
+while True:
+    print(" \
+        1. Грамматика 1\n \
+        2. Грамматика 2\n \
+        3. Грамматика 3\n")
 
-for test_string in strings_to_check:
-    print(f"\nTesting string: {test_string}")
-    result = pda.analyze(test_string)
-    print(f"Result: {'Accepted' if result else 'Rejected'}")
+    o = int(input("^: "))
+
+    match o:
+        case 1:
+            getGrammar('lab3/grammar1.txt')
+            print(" \
+                    1. Сгенерировать\n \
+                    2. Проверить")
+            choice1 = input("^: ")
+            match choice1:
+                case "1":
+                    if len(RULES) != 0:
+                        s = generateString(RULES, nonTerminals)
+                        print("result: ", s)
+                    else:
+                        print(" :( ")
+                case "2":
+                    if len(RULES) != 0:
+                        s = input("input: ")
+                        res = checkString(s, RULES, 100000, nonTerminals)
+                        if res == True:
+                            print(f'Строка {s} существует :)')
+                        else:
+                            print(f'Строка {s} не существует :(')
+                    else:
+                        print(" :( ")
+        case 2:
+            getGrammar('lab3/grammar2.txt')
+            print(" \
+                    1. Сгенерировать\n \
+                    2. Проверить")
+            choice2 = input("^: ")
+            match choice2:
+                case "1":
+                    if len(RULES) != 0:
+                        s = generateString(RULES, nonTerminals)
+                        print("result: ", s)
+                    else:
+                        print(" :( ")
+                case "2":
+                    if len(RULES) != 0:
+                        s = input("input: ")
+                        res = checkString(s, RULES, 100000, nonTerminals)
+                        if res == True:
+                            print(f'Строка {s} существует :)')
+                        else:
+                            print(f'Строка {s} не существует :(')
+                    else:
+                        print(" :( ")
+            
+        case 3:
+            getGrammar('lab3/grammar3.txt')
+            print(" \
+                    1. Сгенерировать\n \
+                    2. Проверить")
+            choice3 = input("^: ")
+            match choice3:
+                case "1":
+                    if len(RULES) != 0:
+                        s = generateString(RULES, nonTerminals)
+                        print("result: ", s)
+                    else:
+                        print(" :( ")
+                case "2":
+                    if len(RULES) != 0:
+                        s = input("input: ")
+                        res = checkString(s, RULES, 100000, nonTerminals)
+                        if res == True:
+                            print(f'Строка {s} существует :)')
+                        else:
+                            print(f'Строка {s} не существует :(')
+                    else:
+                        print(" :( ")
+        
+        case _: break
+
+'''
+print(filename)
+getGrammar(r'C:/Users/mahho/Desktop/g3.txt')
+#generateString(RULES, nonTerminals)
+#print(checkString(input(), RULES, initial_state=nonTerminals[0]))
+
+for i in range(0, 100):
+    string = generateString(RULES, nonTerminals)
+    print("-",string)
+    res = checkString(string, RULES, initial_state=nonTerminals[0])
+    if res == True and len(string) > 2:
+        print(string)
+string = generateString(RULES, nonTerminals)
+while len(string) > 10:
+    string = generateString(RULES, nonTerminals)
+
+print(string)
+string = 'bba'
+print(checkString(string, RULES, 100000, nonTerminals))
+
+for i in range(0, 10):
+    string = generateString(RULES, nonTerminals)
+    print(string)
+    print(checkString(string, RULES, 100000, nonTerminals))'''
