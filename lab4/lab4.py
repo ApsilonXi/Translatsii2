@@ -1,83 +1,97 @@
 import re
 
-class ExpressionEvaluator:
-    def __init__(self, expression):
-        self.expression = expression
-        self.tokens = []
+# Функция для преобразования инфиксного выражения в обратную польскую запись
+def infix_to_postfix(expression):
+    precedence = {'+': 1, '-': 1, '*': 2, '/': 2, '(': 0, ')': 0}
+    output = []
+    operators = []
 
-    def tokenize(self):
-        # Регулярное выражение для токенов: числа, операторы и скобки
-        token_pattern = r'\d+(\.\d+)?|[+\-*/()]'
-        self.tokens = re.findall(token_pattern, self.expression)
-        return self.tokens
-
-    def shunting_yard(self):
-        output = []
-        operators = []
-        precedence = {'+': 1, '-': 1, '*': 2, '/': 2}
-
-        for token in self.tokens:
-            if re.match(r'\d+(\.\d+)?', token):  # Если токен - число
-                output.append(token)
-            elif token in precedence:  # Если токен - оператор
-                while (operators and operators[-1] != '(' and
-                       precedence[operators[-1]] >= precedence[token]):
-                    output.append(operators.pop())
-                operators.append(token)
-            elif token == '(':  # Если токен - открывающая скобка
-                operators.append(token)
-            elif token == ')':  # Если токен - закрывающая скобка
-                while operators and operators[-1] != '(':
-                    output.append(operators.pop())
-                if not operators:
-                    raise ValueError("Количество скобок не совпадает.")
-                operators.pop()  # Удаляем открывающую скобку
-
-        while operators:
-            if operators[-1] == '(':
-                raise ValueError("Количество скобок не совпадает.")
-            output.append(operators.pop())
-
-        return output
-
-    def evaluate_rpn(self, rpn):
-        stack = []
-        for token in rpn:
-            if re.match(r'\d+(\.\d+)?', token):  # Если токен - число
-                stack.append(float(token))
-            else:  # Если токен - оператор
-                b = stack.pop()
-                a = stack.pop()
-                if token == '+':
-                    stack.append(a + b)
-                elif token == '-':
-                    stack.append(a - b)
-                elif token == '*':
-                    stack.append(a * b)
-                elif token == '/':
-                    if b == 0:
-                        raise ValueError("Деление на ноль.")
-                    stack.append(a / b)
-        return stack.pop() if stack else 0
-
-    def evaluate(self):
-        try:
-            self.tokenize()
-            rpn = self.shunting_yard()
-            result = self.evaluate_rpn(rpn)
-            return rpn, result
-        except ValueError as e:
-            return str(e)
-
-# Пример использования
-if __name__ == "__main__":
-    expression = input("Введите арифметическое выражение: ")
-    evaluator = ExpressionEvaluator(expression)
-    output = evaluator.evaluate()
+    tokens = tokenize(expression)
     
-    if isinstance(output, tuple):
-        rpn, result = output
-        print("Обратная польская запись:", ' '.join(rpn))
-        print("Результат вычисления:", result)
-    else:
-        print("Ошибка:", output)
+    for token in tokens:
+        if is_number(token):
+            output.append(token)
+        elif token == '(':
+            operators.append(token)
+        elif token == ')':
+            while operators and operators[-1] != '(':
+                output.append(operators.pop())
+            if not operators or operators[-1] != '(':
+                raise ValueError("Несовпадающие скобки")
+            operators.pop()
+        else:
+            while (operators and precedence[operators[-1]] >= precedence[token]):
+                output.append(operators.pop())
+            operators.append(token)
+
+    while operators:
+        if operators[-1] == '(':
+            raise ValueError("Несовпадающие скобки")
+        output.append(operators.pop())
+
+    return output
+
+# Функция для вычисления выражения в обратной польской записи
+def evaluate_postfix(postfix):
+    stack = []
+
+    for token in postfix:
+        if is_number(token):
+            stack.append(float(token))
+        else:
+            if len(stack) < 2:
+                raise ValueError("Неверное выражение")
+            b = stack.pop()
+            a = stack.pop()
+
+            if token == '+':
+                result = a + b
+            elif token == '-':
+                result = a - b
+            elif token == '*':
+                result = a * b
+            elif token == '/':
+                if b == 0:
+                    raise ValueError("Деление на ноль")
+                result = a / b
+            else:
+                raise ValueError(f"Неизвестный оператор {token}")
+            
+            stack.append(result)
+
+    if len(stack) != 1:
+        raise ValueError("Неверное выражение")
+
+    return stack[0]
+
+# Исправленная функция для разбора выражения на токены
+def tokenize(expression):
+    # Новое регулярное выражение для чисел (целых и дробных), операторов и скобок
+    token_pattern = re.compile(r'\d+\.\d+|\d+|[+\-*/()]')
+    tokens = token_pattern.findall(expression)
+    return tokens
+
+# Функция для проверки, является ли строка числом
+def is_number(token):
+    try:
+        float(token)
+        return True
+    except ValueError:
+        return False
+
+# Основная функция программы
+def main():
+    expression = input("Введите арифметическое выражение: ").strip()
+
+    try:
+        postfix = infix_to_postfix(expression)
+        print(f"Обратная польская запись: {' '.join(postfix)}")
+
+        result = evaluate_postfix(postfix)
+        print(f"Результат: {result}")
+
+    except ValueError as e:
+        print(f"Ошибка: {e}")
+
+if __name__ == "__main__":
+    main()
