@@ -24,7 +24,6 @@ def assignWeights(grammar):
         lengths = [len(rule) for rule in rules]
         total_length = sum([1 / length for length in lengths]) 
         weights[nonT] = [(1 / length) / total_length for length in lengths]
-    #print(weights)
     return weights
 
 def check_nonT_in_str(string, nonT):
@@ -47,7 +46,6 @@ def generateString(grammar, nonT, max_depth=10):
                 new += choice(RULES[i]) 
             else:
                 new += i
-        #print(new)
         string = new
         depth += 1
     
@@ -59,10 +57,8 @@ def generateString(grammar, nonT, max_depth=10):
                     new += choices(RULES[i], weights[i])[0]  
                 else:
                     new += i
-            #print(new)
             string = new
     
-    #print("ПОЛУЧЕНА СТРОКА: ", string)
     return string
             
 def checkString(string, grammar, max, nonT):
@@ -185,28 +181,4 @@ while True:
                         print(" :( ")
         
         case _: break
-
-'''
-print(filename)
-getGrammar(r'C:/Users/mahho/Desktop/g3.txt')
-#generateString(RULES, nonTerminals)
-#print(checkString(input(), RULES, initial_state=nonTerminals[0]))
-
-for i in range(0, 100):
-    string = generateString(RULES, nonTerminals)
-    print("-",string)
-    res = checkString(string, RULES, initial_state=nonTerminals[0])
-    if res == True and len(string) > 2:
-        print(string)
-string = generateString(RULES, nonTerminals)
-while len(string) > 10:
-    string = generateString(RULES, nonTerminals)
-
-print(string)
-string = 'bba'
-print(checkString(string, RULES, 100000, nonTerminals))
-
-for i in range(0, 10):
-    string = generateString(RULES, nonTerminals)
-    print(string)
-    print(checkString(string, RULES, 100000, nonTerminals))'''
+        
