@@ -1,186 +1,294 @@
 import re
 
-# Класс для хранения токена с типом и значением
-class Token:
-    def __init__(self, type_, value, line, pos):
-        self.type = type_
-        self.value = value
-        self.line = line
-        self.pos = pos
-
-    def __repr__(self):
-        return f"Token({self.type}, {self.value}, {self.line}:{self.pos})"
-
-
-# Лексический анализатор (токенизатор)
-class Lexer:
-    def __init__(self, code):
-        self.code = code
-        self.keywords = {"int", "bool", "void", "for", "if", "return", "main"}
-        self.operators = {"=", "<", ">", "==", "!=", "(", ")", "{", "}", ";", ","}
-        self.tokens = []
-        self.current_line = 1
-        self.current_pos = 0  # позиция внутри строки
+class Parser:
+    def __init__(self, input_code):
+        """
+        Инициализация парсера с исходным кодом.
+        """
+        self.input_code = input_code
+        self.position = 0
+        self.current_token = None
+        self.errors = []
+        self.tokenize()
 
     def tokenize(self):
-        # Регулярное выражение для токенизации
-        pattern = re.compile(r'\s*(?:(\d+)|([a-zA-Z_]\w*)|([<>!=]=?|[{}();,])|(.))')
-        pos = 0
-        while pos < len(self.code):
-            match = pattern.match(self.code, pos)
-            if not match:
-                print(f"Неизвестный символ на строке {self.current_line}, позиция {self.current_pos}: '{self.code[pos]}'")
-                pos += 1
-                self.current_pos += 1
-                continue
+        """
+        Разбиение исходного кода на токены с использованием регулярных выражений.
+        """
+        self.tokens = re.findall(r'\w+|[();{}=><!]', self.input_code)
+        self.tokens.append(None)  # Добавляем конечный токен
+        self.position = 0
+        self.next_token()
 
-            number, identifier, operator, unknown = match.groups()
-            
-            # Пропуск пробелов и символов новой строки
-            if match.group(0).isspace():
-                if '\n' in match.group(0):
-                    self.current_line += 1
-                    self.current_pos = 0  # сброс позиции для новой строки
-                else:
-                    self.current_pos += len(match.group(0))
-                pos = match.end()
-                continue
-
-            if number:
-                self.tokens.append(Token('NUMBER', number, self.current_line, self.current_pos))
-            elif identifier:
-                if identifier in self.keywords:
-                    self.tokens.append(Token('KEYWORD', identifier, self.current_line, self.current_pos))
-                else:
-                    self.tokens.append(Token('IDENTIFIER', identifier, self.current_line, self.current_pos))
-            elif operator:
-                self.tokens.append(Token('OPERATOR', operator, self.current_line, self.current_pos))
-            elif unknown:
-                print(f"Неизвестный символ на строке {self.current_line}, позиция {self.current_pos}: '{unknown}'")
-            
-            # Обновление позиции в коде
-            pos = match.end()
-            self.current_pos += match.end() - match.start()
-
-        return self.tokens
-
-
-# Синтаксический анализатор
-class Parser:
-    def __init__(self, tokens):
-        self.tokens = tokens
-        self.current = 0
-        self.errors = 0
-
-    def error(self, message):
-        token = self.tokens[self.current] if self.current < len(self.tokens) else Token('EOF', '', -1, -1)
-        print(f"Ошибка: {message} на строке {token.line}, позиция {token.pos}")
-        self.errors += 1
-
-    def match(self, expected_type=None, expected_value=None):
-        if self.current >= len(self.tokens):
-            return False
-        token = self.tokens[self.current]
-        if expected_type and token.type != expected_type:
-            return False
-        if expected_value and token.value != expected_value:
-            return False
-        self.current += 1
-        return True
+    def next_token(self):
+        """
+        Переход к следующему токену.
+        """
+        self.current_token = self.tokens[self.position]
+        self.position += 1
 
     def parse(self):
-        # Начало разбора основной функции
-        if not self.match('KEYWORD', 'int') and not self.match('KEYWORD', 'bool') and not self.match('KEYWORD', 'void'):
-            self.error("Ожидался тип 'int', 'bool' или 'void'")
-        if not self.match('KEYWORD', 'main'):
-            self.error("Ожидалась функция 'main'")
-        if not self.match('OPERATOR', '(') or not self.match('OPERATOR', ')'):
-            self.error("Ожидались скобки '()' после 'main'")
-        if not self.match('OPERATOR', '{'):
-            self.error("Ожидалась открывающая фигурная скобка '{'")
-
-        # Разбираем тело программы
-        while not self.match('OPERATOR', '}'):
-            self.statement()
-
-        print(f"Синтаксический анализ завершен с {self.errors} ошибками")
-
-    def statement(self):
-        if self.match('KEYWORD', 'int') or self.match('KEYWORD', 'bool') or self.match('KEYWORD', 'void'):
-            # Декларация переменной
-            if not self.match('IDENTIFIER'):
-                self.error("Ожидался идентификатор")
-            if not self.match('OPERATOR', '='):
-                self.error("Ожидался оператор '='")
-            if not self.match('NUMBER') and not self.match('IDENTIFIER'):
-                self.error("Ожидалось число или идентификатор")
-            if not self.match('OPERATOR', ';'):
-                self.error("Ожидалась ';' после декларации")
-        elif self.match('KEYWORD', 'return'):
-            # Оператор return
-            if not self.match('NUMBER'):
-                self.error("Ожидалось число после 'return'")
-            if not self.match('OPERATOR', ';'):
-                self.error("Ожидалась ';' после 'return'")
-        elif self.match('KEYWORD', 'for'):
-            # Оператор for
-            if not self.match('OPERATOR', '('):
-                self.error("Ожидалась '(' после 'for'")
-            self.statement()  # Декларация в for
-            if not self.match('OPERATOR', ';'):
-                self.error("Ожидалась ';' после декларации в 'for'")
-            self.expression()  # Условие в for
-            if not self.match('OPERATOR', ';'):
-                self.error("Ожидалась ';' после условия в 'for'")
-            self.statement()  # Итерация в for
-            if not self.match('OPERATOR', ')'):
-                self.error("Ожидалась ')' после 'for'")
-
-            # Проверка тела цикла, если оно в фигурных скобках
-            if self.match('OPERATOR', '{'):
-                while not self.match('OPERATOR', '}'):
-                    self.statement()
+        """
+        Метод для парсинга исходного кода.
+        """
+        if self.current_token in ['int', 'bool', 'void']:
+            self.parse_type()
+            if self.current_token == 'main':
+                self.next_token()
+                self.parse_main()
             else:
-                # Ожидаем одну инструкцию, если нет фигурных скобок
-                self.statement()
-        elif self.match('KEYWORD', 'if'):
-            # Оператор if
-            if not self.match('OPERATOR', '('):
-                self.error("Ожидалась '(' после 'if'")
-            self.expression()
-            if not self.match('OPERATOR', ')'):
-                self.error("Ожидалась ')' после условия в 'if'")
-            self.statement()
+                self.add_error("Ожидалось 'main' после типа")
         else:
-            self.error("Ожидался оператор или декларация")
+            self.add_error("Ожидался тип (int, bool, void) в начале")
 
-    def expression(self):
-        # Разбор простого выражения вида "i < 10"
-        if not self.match('IDENTIFIER') and not self.match('NUMBER'):
-            self.error("Ожидался идентификатор или число в выражении")
-        if not self.match('OPERATOR', '<') and not self.match('OPERATOR', '>') and not self.match('OPERATOR', '==') and not self.match('OPERATOR', '!='):
-            self.error("Ожидался оператор сравнения в выражении")
-        if not self.match('IDENTIFIER') and not self.match('NUMBER'):
-            self.error("Ожидался идентификатор или число после оператора сравнения")
+    def parse_type(self):
+        """
+        Проверка и обработка типа данных.
+        """
+        if self.current_token in ['int', 'bool', 'void']:
+            self.next_token()
+        else:
+            self.add_error("Ожидался тип (int, bool, void)")
+
+    def parse_main(self):
+        """
+        Обработка главной функции main().
+        """
+        if self.current_token == '(':
+            self.next_token()
+            if self.current_token == ')':
+                self.next_token()
+                self.parse_block()
+            else:
+                self.add_error("Ожидалась закрывающая скобка ')' после main")
+        else:
+            self.add_error("Ожидалась открывающая скобка '(' после main")
+
+    def parse_block(self):
+        """
+        Обработка блока кода, заключенного в фигурные скобки.
+        """
+        if self.current_token == '{':
+            self.next_token()
+            while self.current_token and self.current_token != '}':
+                self.parse_statement()
+            if self.current_token == '}':
+                self.next_token()
+            else:
+                self.add_error("Ожидалась закрывающая скобка '}'")
+        else:
+            self.add_error("Ожидалась открывающая скобка '{'")
+
+    def parse_statement(self):
+        """
+        Обработка различных типов выражений и операторов.
+        """
+        if self.current_token == 'return':
+            self.parse_return_statement()
+        elif self.current_token == '{':
+            self.parse_block()
+        elif self.current_token == 'for':
+            self.parse_for_statement()
+        elif self.current_token == 'if':
+            self.parse_if_statement()
+        elif self.current_token:
+            self.parse_declaration()
+            if self.current_token == ';':
+                self.next_token()
+            else:
+                self.add_error("Ожидалась точка с запятой ';' после оператора")
+        else:
+            self.add_error("Неожиданный конец выражения")
+
+    def parse_declaration(self):
+        """
+        Обработка объявления переменной.
+        """
+        if self.current_token in ['int', 'bool', 'void']:
+            self.parse_type()
+            if self.current_token and self.is_identifier(self.current_token):
+                self.next_token()
+                self.parse_assignment()
+            else:
+                self.add_error("Ожидалось имя переменной после типа")
+        else:
+            self.add_error("Ожидался тип (int, bool, void) для объявления")
+
+    def parse_assignment(self):
+        """
+        Обработка оператора присваивания.
+        """
+        if self.current_token == '=':
+            self.next_token()
+            if self.current_token.isdigit() or self.is_identifier(self.current_token):
+                self.next_token()
+            else:
+                self.add_error("Ожидалось значение или идентификатор после '='")
+        else:
+            self.add_error("Ожидался оператор '=' для присваивания")
+
+    def parse_for_statement(self):
+        """
+        Обработка оператора цикла for.
+        """
+        if self.current_token == 'for':
+            self.next_token()
+            if self.current_token == '(':
+                self.next_token()
+                self.parse_for_declaration()
+                self.parse_for_condition()
+                self.parse_for_iteration()
+                if self.current_token == ')':
+                    self.next_token()
+                    self.parse_statement()
+                else:
+                    self.add_error("Ожидалась закрывающая скобка ')' после цикла for")
+            else:
+                self.add_error("Ожидалась открывающая скобка '(' после 'for'")
+        else:
+            self.add_error("Ожидалось 'for'")
+
+    def parse_for_declaration(self):
+        """
+        Обработка объявления переменной в цикле for.
+        """
+        if self.current_token in ['int', 'bool', 'void']:
+            self.parse_declaration()
+        else:
+            self.add_error("Ожидалось объявление переменной в цикле for")
+
+    def parse_for_condition(self):
+        """
+        Обработка условного выражения в цикле for.
+        """
+        if self.current_token == ';':
+            self.next_token()
+            self.parse_expression()
+        else:
+            self.add_error("Ожидалась точка с запятой ';' после условия в цикле for")
+
+    def parse_for_iteration(self):
+        """
+        Обработка выражения итерации в цикле for.
+        """
+        if self.current_token == ';':
+            self.next_token()
+            if self.current_token.isdigit() or self.is_identifier(self.current_token):
+                self.next_token()
+            else:
+                self.add_error("Ожидался идентификатор или число в итерации цикла for")
+
+    def parse_if_statement(self):
+        """
+        Обработка оператора if.
+        """
+        if self.current_token == 'if':
+            self.next_token()
+            if self.current_token == '(':
+                self.next_token()
+                self.parse_expression()
+                if self.current_token == ')':
+                    self.next_token()
+                    self.parse_statement()
+                else:
+                    self.add_error("Ожидалась закрывающая скобка ')' после условия if")
+            else:
+                self.add_error("Ожидалась открывающая скобка '(' после 'if'")
+        else:
+            self.add_error("Ожидалось 'if'")
+
+    def parse_return_statement(self):
+        """
+        Обработка оператора return.
+        """
+        if self.current_token == "return":
+            self.next_token()
+            if self.current_token.isdigit():
+                self.next_token()
+                if self.current_token == ';':
+                    self.next_token()
+                else:
+                    self.add_error("Ожидалась точка с запятой ';' после return")
+            else:
+                self.add_error("Ожидалось число после return")
+
+    def parse_expression(self):
+        """
+        Обработка выражения.
+        """
+        if self.is_identifier(self.current_token):
+            self.next_token()
+            self.parse_relational_operator()
+        elif self.current_token.isdigit():
+            self.next_token()
+            self.parse_relational_operator()
+        else:
+            self.add_error("Ожидался идентификатор или число в выражении")
+
+    def parse_relational_operator(self):
+        """
+        Обработка оператора сравнения.
+        """
+        if self.current_token in ['<', '>', '==', '!=']:
+            self.next_token()
+            if self.is_identifier(self.current_token) or self.current_token.isdigit():
+                self.next_token()
+            else:
+                self.add_error("Ожидался идентификатор или число после оператора сравнения")
+        else:
+            self.add_error("Ожидался оператор сравнения после идентификатора или числа")
+
+    def is_identifier(self, token):
+        """
+        Проверка, является ли токен идентификатором.
+        """
+        return re.match(r'^[a-zA-Z_]\w*$', token) is not None
+
+    def add_error(self, message):
+        """
+        Добавление ошибки в список ошибок.
+        """
+        self.errors.append(f"Ошибка на токене '{self.current_token}': {message}")
+        self.skip_to_next_semicolon_or_brace()
+
+    def skip_to_next_semicolon_or_brace(self):
+        """
+        Пропуск токенов до следующего символа ';' или '}'.
+        """
+        while self.current_token and self.current_token not in [';', '}']:
+            self.next_token()
+        if self.current_token in [';', '}']:
+            self.next_token()
+
+    def get_errors(self):
+        """
+        Возвращает список ошибок.
+        """
+        return self.errors
 
 
-# Основная функция
-def main():
-    code = """
-    int main() { 
-        int a = 5; 
-        for (int i = 0; i < 10;) { 
-            return 3; 
-        } 
+# Пример использования
+input_code = """
+int main() {
+    int b = 10;
+    if (b > 7) {
+        return 10;
     }
-    """
-    
-    lexer = Lexer(code)
-    tokens = lexer.tokenize()
-    print("Токены:", tokens)
-    
-    parser = Parser(tokens)
-    parser.parse()
+    for (int i = 0; i < 10; i++) {
+        int a = 10;
+    }
+    return 0;
+}
+"""
 
-if __name__ == "__main__":
-    main()
+parser = Parser(input_code)
+parser.parse()
+
+# Вывод результатов
+errors = parser.get_errors()
+if errors:
+    print(f"Количество ошибок: {len(errors)}")
+    for error in errors:
+        print(error)
+else:
+    print("Ошибок не найдено.")
